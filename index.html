@@ -684,8 +684,8 @@ function renderProducts(){
     grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;color:var(--muted);padding:40px;font-size:.88rem">No products found 🌿</div>`;
     return;
   }
-  grid.innerHTML = filtered.map(p=>`
-    <div class="product-card" onclick="openDetail(${p.id})">
+  grid.innerHTML = filtered.map((p,idx)=>`
+    <div class="product-card" onclick="openDetail(${idx})">
       <div class="product-img">
         ${p.photo ? `<img src="${p.photo}" alt="${p.name}">` : ''}
         <span class="emoji-fallback" ${p.photo?'style="display:none"':''}>${p.emoji||'🌿'}</span>
@@ -696,7 +696,7 @@ function renderProducts(){
         <div class="product-desc">${p.desc.substring(0,58)}…</div>
         <div class="product-footer">
           <div class="product-price">€${p.price} <span>from ${p.unit}</span></div>
-          <button class="add-btn" onclick="event.stopPropagation();addToCart(${p.id},1)">+</button>
+          <button class="add-btn" onclick="event.stopPropagation();addToCartByIndex(${idx},1)">+</button>
         </div>
       </div>
     </div>
@@ -704,9 +704,21 @@ function renderProducts(){
 }
 
 // ===== DETAIL =====
-function openDetail(id){
-  const p = PRODUCTS.find(x=>x.id===id);
+function getFilteredProducts(){
+  const search = document.getElementById('search-input').value.toLowerCase();
+  return PRODUCTS.filter(p=>{
+    const matchCat = currentFilter==='all' || p.category===currentFilter || p.badge===currentFilter;
+    const matchSearch = !search || p.name.toLowerCase().includes(search) || p.desc.toLowerCase().includes(search) || p.origin.toLowerCase().includes(search);
+    return matchCat && matchSearch;
+  });
+}
+
+function openDetail(idx){
+  const filtered = getFilteredProducts();
+  const p = filtered[idx];
+  if(!p) return;
   detailQty = 1;
+  const pid = p.id;
   document.getElementById('detail-content').innerHTML = `
     <div class="panel-handle"></div>
     <div class="detail-img">
@@ -715,14 +727,14 @@ function openDetail(id){
     </div>
     <div>
       <div class="detail-name">${p.name}</div>
-      <div class="detail-origin">🌍 Origin: ${p.origin}</div>
+      <div class="detail-origin">🌍 Origin: ${p.origin||''}</div>
     </div>
-    <div class="detail-desc">${p.desc}</div>
+    <div class="detail-desc">${p.desc||''}</div>
     <div class="detail-tags">${(p.tags||[]).map(t=>`<span class="tag">${t}</span>`).join('')}</div>
     <div class="detail-price-row">
       <div>
         <div class="detail-price">€${p.price}</div>
-        <div class="detail-unit">from ${p.unit} · €${p.priceG}/g</div>
+        <div class="detail-unit">from ${p.unit||'10g'} · €${p.priceG||0}/g</div>
       </div>
       <div class="qty-selector">
         <button onclick="changeDetailQty(-1)">−</button>
@@ -730,22 +742,31 @@ function openDetail(id){
         <button onclick="changeDetailQty(1)">+</button>
       </div>
     </div>
-    <button class="checkout-btn" onclick="addToCart(${p.id},parseInt(document.getElementById('detail-qty').textContent));closePanel('detail-panel');showToast('✅ Added to cart!')">🛒 Add to Cart</button>
+    <button class="checkout-btn" onclick="addToCartById('${pid}',parseInt(document.getElementById('detail-qty').textContent));closePanel('detail-panel');showToast('✅ Added to cart!')">🛒 Add to Cart</button>
   `;
   document.getElementById('detail-panel').classList.add('open');
 }
 function changeDetailQty(d){ detailQty=Math.max(1,detailQty+d); document.getElementById('detail-qty').textContent=detailQty; }
 
 // ===== CART =====
-function addToCart(id,qty=1){
-  const e=cart.find(x=>x.id===id);
-  if(e) e.qty+=qty; else cart.push({id,qty});
+function addToCartByIndex(idx, qty=1){
+  const filtered = getFilteredProducts();
+  const p = filtered[idx];
+  if(!p) return;
+  addToCartById(String(p.id), qty);
+}
+function addToCartById(id, qty=1){
+  id = String(id);
+  const e=cart.find(x=>String(x.id)===id);
+  if(e) e.qty+=qty; else cart.push({id, qty});
   saveCart(); updateCartUI(); showToast('✅ Added to cart!');
 }
+function addToCart(id, qty=1){ addToCartById(id, qty); }
 function changeQty(id,d){
-  const item=cart.find(x=>x.id===id); if(!item) return;
+  id = String(id);
+  const item=cart.find(x=>String(x.id)===id); if(!item) return;
   item.qty=Math.max(0,item.qty+d);
-  if(!item.qty) cart=cart.filter(x=>x.id!==id);
+  if(!item.qty) cart=cart.filter(x=>String(x.id)!==id);
   saveCart(); updateCartUI(); renderCartPanel();
 }
 function saveCart(){ localStorage.setItem('tp_cart',JSON.stringify(cart)); }
@@ -767,15 +788,15 @@ function renderCartPanel(){
   }
   let tot=0;
   list.innerHTML=cart.map(item=>{
-    const p=PRODUCTS.find(x=>x.id===item.id); if(!p) return '';
+    const p=PRODUCTS.find(x=>String(x.id)===String(item.id)); if(!p) return '';
     tot+=p.price*item.qty;
     return `<div class="cart-item">
       <div class="cart-item-thumb">${p.photo?`<img src="${p.photo}">`:(p.emoji||'🌿')}</div>
       <div class="cart-item-info"><div class="cart-item-name">${p.name}</div><div class="cart-item-price">€${p.price} × ${p.unit}</div></div>
       <div class="cart-qty">
-        <button class="qty-btn" onclick="changeQty(${p.id},-1)">−</button>
+        <button class="qty-btn" onclick="changeQty('${p.id}',-1)">−</button>
         <span class="qty-num">${item.qty}</span>
-        <button class="qty-btn" onclick="changeQty(${p.id},1)">+</button>
+        <button class="qty-btn" onclick="changeQty('${p.id}',1)">+</button>
       </div>
     </div>`;
   }).join('');
@@ -1010,9 +1031,9 @@ function showToast(msg){
 window.showView=showView; window.openCart=openCart; window.closePanel=closePanel;
 window.setFilter=setFilter; window.filterProducts=filterProducts;
 window.openDetail=openDetail; window.changeDetailQty=changeDetailQty;
-window.addToCart=addToCart; window.changeQty=changeQty;
-window.placeOrder=placeOrder; window.openLoginPanel=openLoginPanel;
-window.doLogin=doLogin; window.doLogout=doLogout;
+window.addToCart=addToCart; window.addToCartById=addToCartById; window.addToCartByIndex=addToCartByIndex;
+window.changeQty=changeQty; window.placeOrder=placeOrder;
+window.openLoginPanel=openLoginPanel; window.doLogin=doLogin; window.doLogout=doLogout;
 window.openAdminPanel=openAdminPanel; window.renderAdminList=renderAdminList;
 window.deleteProduct=deleteProduct; window.openProductForm=openProductForm;
 window.handlePhotoUpload=handlePhotoUpload; window.saveProduct=saveProduct;
